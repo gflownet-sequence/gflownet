@@ -1,0 +1,10 @@
+defaults:
+  - base
+
+_target_: gflownet.proxy.sequences.dna_toy.DNAToyScorer
+
+nucleotide_scores: 
+  'A': 1
+  'C': 2
+  'G': 3
+  'T': 4
