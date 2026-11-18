@@ -1,0 +1,9 @@
+defaults:
+  - base
+
+_target_: gflownet.envs.sequences.actions.ActionsSeq
+
+id: actions-seq
+# Min and max length
+min_length: 1
+max_length: 5

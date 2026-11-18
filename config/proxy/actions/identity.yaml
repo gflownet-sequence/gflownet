@@ -1,0 +1,4 @@
+defaults:
+  - base
+
+_target_: gflownet.proxy.sequences.actions_seq.identity.ActionsIdentity

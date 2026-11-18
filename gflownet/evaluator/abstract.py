@@ -270,7 +270,7 @@ class AbstractEvaluator(metaclass=ABCMeta):
             no_wandb=no_wandb,
             print_config=print_config,
             device=device,
-            load_final_ckpt=load_final_ckpt,
+            load_last_checkpoint=load_final_ckpt,
         )
         return cls.from_agent(gfn_agent)
 
