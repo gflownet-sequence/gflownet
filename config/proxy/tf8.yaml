@@ -1,0 +1,7 @@
+defaults:
+  - base
+
+_target_: gflownet.proxy.sequences.tf8.TFBind8Scorer
+
+mode: exact
+ridge_alpha: 1.0
