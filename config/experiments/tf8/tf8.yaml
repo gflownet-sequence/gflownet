@@ -1,0 +1,71 @@
+# @package _global_
+# TF Bind 8 (SIX6_REF_R1) with the exact reward and the TB loss
+
+defaults:
+  - override /env: sequences/dna
+  - override /gflownet: trajectorybalance
+  - override /loss: trajectorybalance
+  - override /proxy: tf8
+  - override /logger: wandb
+
+# Environment: TF Bind 8 sequences are exactly 8 letters
+env:
+  min_length: 8
+  max_length: 8
+
+# Proxy: exact lookup, with a sharp reward
+proxy:
+  mode: exact
+  reward_function: exponential
+  reward_function_kwargs:
+    beta: 20
+    alpha: 1.0
+
+# Buffer
+buffer:
+  test:
+    type: random
+    n: 1000
+
+# GFlowNet hyperparameters
+gflownet:
+  random_action_prob: 0.1
+  optimizer:
+    batch_size:
+      forward: 64
+    lr: 0.001
+    z_dim: 8
+    lr_z_mult: 100
+    n_train_steps: 5000
+
+# Policy
+policy:
+  forward:
+    type: mlp
+    n_hid: 128
+    n_layers: 2
+  backward:
+    shared_weights: True
+
+# WandB
+logger:
+  do:
+    online: False
+  lightweight: True
+  project_name: "tf8"
+  run_name: "TFBind8 exact TB"
+  tags:
+    - gflownet
+    - tf8
+
+# Evaluator
+evaluator:
+  first_it: True
+  period: 100
+  n: 1000
+  checkpoints_period: 500
+
+# Hydra
+hydra:
+  run:
+    dir: ${user.logdir.root}/tf8/${now:%Y-%m-%d_%H-%M-%S_%f}
