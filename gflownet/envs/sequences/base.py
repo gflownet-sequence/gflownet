@@ -14,6 +14,10 @@ from torchtyping import TensorType
 from gflownet.envs.base import GFlowNetEnv
 from gflownet.utils.common import copy, set_device, tlong
 
+# Sides for bidirectional actions: (token_idx, side)
+BACK = 0
+FRONT = 1
+
 
 class SequenceBase(GFlowNetEnv):
     """
@@ -31,6 +35,7 @@ class SequenceBase(GFlowNetEnv):
         min_length: int = 1,
         max_length: int = 5,
         pad_token: Union[int, float, str] = -1,
+        bidirectional: bool = False,
         **kwargs,
     ):
         """
@@ -46,6 +51,10 @@ class SequenceBase(GFlowNetEnv):
             Maximum sequence length.
         pad_token : int, float, str
             Token used to pad incomplete sequences.
+        bidirectional : bool
+            If True, tokens can be appended to the back or prepended to the front of
+            the sequence, and actions are (token_idx, side) tuples. If False
+            (default), tokens are only appended to the back.
         **kwargs
             Additional keyword arguments forwarded to :class:`GFlowNetEnv`.
         """
@@ -72,6 +81,7 @@ class SequenceBase(GFlowNetEnv):
         self.n_tokens = len(self.tokens)
         self.min_length = min_length
         self.max_length = max_length
+        self.bidirectional = bidirectional
         self.eos_idx = -1
         self.pad_idx = 0
         self.dtype = type(pad_token)
@@ -83,8 +93,12 @@ class SequenceBase(GFlowNetEnv):
         self.source = tlong(
             torch.full((self.max_length,), self.pad_idx), device=self.device
         )
-        # End-of-sequence action
-        self.eos = (self.eos_idx,)
+        # End-of-sequence action. In bidirectional mode all actions have two elements
+        # (the action space is converted into a single tensor), so EOS does too.
+        if self.bidirectional:
+            self.eos = (self.eos_idx, BACK)
+        else:
+            self.eos = (self.eos_idx,)
         # Base class init
         super().__init__(**kwargs)
 
@@ -97,7 +111,16 @@ class SequenceBase(GFlowNetEnv):
 
         The action space of this parent class is:
             action_space: [(1,), (2,), (-1,)]
+
+        If bidirectional, each action is (token_idx, side), with side BACK (0) to
+        append or FRONT (1) to prepend:
+            action_space: [(1, 0), (2, 0), (1, 1), (2, 1), (-1, 0)]
         """
+        if self.bidirectional:
+            indices = [self.token2idx[token] for token in self.tokens]
+            back = [(idx, BACK) for idx in indices]
+            front = [(idx, FRONT) for idx in indices]
+            return back + front + [self.eos]
         return [(self.token2idx[token],) for token in self.tokens] + [(self.eos_idx,)]
 
     def _get_max_trajectory_length(self) -> int:
@@ -138,6 +161,12 @@ class SequenceBase(GFlowNetEnv):
             # All actions are valid except EOS
             mask = [False for _ in range(self.action_space_dim)]
             mask[self.action_space.index(self.eos)] = True
+            # Bidirectional: from the empty sequence, front actions would duplicate
+            # back actions, so only back actions are valid
+            if self.bidirectional and self._get_seq_length(state) == 0:
+                for idx, action in enumerate(self.action_space):
+                    if action[1] == FRONT:
+                        mask[idx] = True
             return mask
 
         # If sequence is not at maximum length, all actions are valid
@@ -187,8 +216,24 @@ class SequenceBase(GFlowNetEnv):
         pos_last_token = self._get_seq_length(state) - 1
         parent = copy(state)
         parent[pos_last_token] = self.pad_idx
-        p_action = (int(state[pos_last_token]),)
-        return [parent], [p_action]
+        if not self.bidirectional:
+            p_action = (int(state[pos_last_token]),)
+            return [parent], [p_action]
+
+        # Bidirectional: up to two parents
+        # 1) Undo "append to back": remove the last token (computed above)
+        parents = [parent]
+        actions = [(int(state[pos_last_token]), BACK)]
+        # 2) Undo "prepend to front": remove the first token and shift left. Only for
+        # sequences with at least 2 tokens, since front actions are not allowed from
+        # the empty sequence.
+        if pos_last_token >= 1:
+            parent = copy(state)
+            parent[:pos_last_token] = state[1 : pos_last_token + 1].clone()
+            parent[pos_last_token] = self.pad_idx
+            parents.append(parent)
+            actions.append((int(state[0]), FRONT))
+        return parents, actions
 
     def step(
         self, action: Tuple[int], skip_mask_check: bool = False
@@ -229,7 +274,14 @@ class SequenceBase(GFlowNetEnv):
             self.done = True
             return self.state, action, valid
         # Update state
-        self.state[self._get_seq_length()] = action[0]
+        if self.bidirectional and action[1] == FRONT:
+            # Prepend: shift tokens one position right and write at position 0
+            length = self._get_seq_length()
+            self.state[1 : length + 1] = self.state[:length].clone()
+            self.state[0] = action[0]
+        else:
+            # Append to the back
+            self.state[self._get_seq_length()] = action[0]
         return self.state, action, valid
 
     def states2proxy(

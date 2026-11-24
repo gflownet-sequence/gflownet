@@ -2,7 +2,7 @@
 # TF Bind 8 (SIX6_REF_R1) with the exact reward and the TB loss
 
 defaults:
-  - override /env: sequences/dna
+  - override /env: sequences/tf8
   - override /gflownet: trajectorybalance
   - override /loss: trajectorybalance
   - override /proxy: tf8

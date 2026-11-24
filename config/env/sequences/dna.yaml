@@ -5,7 +5,7 @@ _target_: gflownet.envs.sequences.dna.DNA
 
 id: dna
 # Min and max length
-min_length: 8
-max_length: 8
+min_length: 1
+max_length: 5
 # Proxy format
 proxy_fmt: "onehot-np"
